@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LUKSO 0x01 to 0x02 Credential Upgrader</title>
+    <!-- Import Ethers.js v6 via unpkg CDN -->
+    <script src="https://unpkg.com"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 2rem; max-width: 600px; margin: 0 auto; }
+        .card { background: #1e293b; border-radius: 12px; padding: 2rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border: 1px solid #334155; }
+        h1 { font-size: 1.5rem; margin-top: 0; color: #f43f5e; }
+        label { display: block; margin-top: 1rem; margin-bottom: 0.5rem; font-weight: 600; color: #94a3b8; }
+        input { wdouble-width: 100%; width: -webkit-fill-available; padding: 0.75rem; background: #0f172a; border: 1px solid #475569; border-radius: 6px; color: #fff; font-family: monospace; font-size: 0.9rem; }
+        button { background: #f43f5e; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 1.5rem; width: 100%; font-size: 1rem; }
+        button:hover { background: #e11d48; }
+        button:disabled { background: #475569; cursor: not-allowed; }
+        .status { margin-top: 1.5rem; padding: 1rem; border-radius: 6px; font-size: 0.9rem; display: none; word-break: break-all; }
+        .info { background: #1e1b4b; border-left: 4px solid #6366f1; color: #c7d2fe; }
+        .success { background: #064e3b; border-left: 4px solid #10b981; color: #a7f3d0; }
+        .error { background: #4c1d95; border-left: 4px solid #8b5cf6; color: #ddd6fe; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>LUKSO Validator Credential Upgrader</h1>
+    <p style="color: #94a3b8; font-size: 0.9rem;">Upgrades a 0x01 validator to a compounding 0x02 validator via self-consolidation.</p>
+    
+    <div class="status info" id="networkInfo" style="display: block;">
+        <strong>Target Network:</strong> LUKSO Mainnet (Chain ID: 42)<br>
+        <strong>System Address:</strong> 0x00431F263cE400f4455c2dCf564e53007Ca4bbBb
+    </div>
+
+    <button id="connectBtn">Connect Wallet</button>
+
+    <div id="txForm" style="display: none;">
+        <label for="pubKey">Validator Public Key (48-byte BLS hex)</label>
+        <input type="text" id="pubKey" placeholder="0xb123... or raw hex string without 0x" required>
+        
+        <button id="submitBtn">Submit Upgrade Transaction</button>
+    </div>
+
+    <div class="status" id="statusBox"></div>
+</div>
+
+<script>
+    const LUKSO_CHAIN_ID = 42;
+    const CONSOLIDATION_CONTRACT = "0x00431F263cE400f4455c2dCf564e53007Ca4bbBb";
+    
+    let provider;
+    let signer;
+    let userAddress;
+
+    const connectBtn = document.getElementById('connectBtn');
+    const txForm = document.getElementById('txForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const pubKeyInput = document.getElementById('pubKey');
+    const statusBox = document.getElementById('statusBox');
+
+    function showStatus(text, type) {
+        statusBox.className = `status ${type}`;
+        statusBox.innerHTML = text;
+        statusBox.style.display = 'block';
+    }
+
+    // Connect wallet step
+    connectBtn.addEventListener('click', async () => {
+        if (!window.ethereum) {
+            showStatus("Error: No browser wallet detected. Install MetaMask or LUKSO Universal Profile browser extension.", "error");
+            return;
+        }
+
+        try {
+            provider = new ethers.BrowserProvider(window.ethereum);
+            
+            // Force wallet connection to request network switch if on wrong chain
+            const network = await provider.getNetwork();
+            if (Number(network.chainId) !== LUKSO_CHAIN_ID) {
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: '0x' + LUKSO_CHAIN_ID.toString(16) }],
+                    });
+                    // Re-instantiate provider after network shift
+                    provider = new ethers.BrowserProvider(window.ethereum);
+                } catch (switchError) {
+                    showStatus("Please switch your wallet network manually to LUKSO Mainnet.", "error");
+                    return;
+                }
+            }
+
+            signer = await provider.getSigner();
+            userAddress = await signer.getAddress();
+            
+            connectBtn.innerText = `Connected: ${userAddress.slice(0,6)}...${userAddress.slice(-4)}`;
+            connectBtn.disabled = true;
+            txForm.style.display = 'block';
+            showStatus("Wallet connected successfully. Your connected wallet MUST be the 0x01 withdrawal address for this validator.", "info");
+        } catch (err) {
+            showStatus(`Connection failed: ${err.message}`, "error");
+        }
+    });
+
+    // Handle transaction build and signing
+    submitBtn.addEventListener('click', async () => {
+        let rawKey = pubKeyInput.value.trim();
+        
+        // Clean hex input data formatting
+        if (rawKey.startsWith('0x')) {
+            rawKey = rawKey.slice(2);
+        }
+
+        // 48 bytes is exactly 96 hexadecimal string characters
+        if (rawKey.length !== 96) {
+            showStatus(`Invalid Public Key. Must be a 48-byte BLS key (96 hex characters long). Current count: ${rawKey.length}`, "error");
+            return;
+        }
+
+        // Build raw Pectra calldata payload layout: [Source Pubkey][Target Pubkey]
+        // Since we are upgrading a validator onto itself, duplicate the key string
+        const finalCalldata = '0x' + rawKey.toLowerCase() + rawKey.toLowerCase();
+
+        showStatus("Preparing transaction payload... Please review the prompt window in your wallet.", "info");
+
+        try {
+            // Build the transaction parameters object
+            const txRequest = {
+                to: CONSOLIDATION_CONTRACT,
+                data: finalCalldata,
+                value: 0n
+            };
+
+            // Broadcast signed transaction payload to LUKSO network provider
+            const txResponse = await signer.sendTransaction(txRequest);
+            
+            showStatus(`Transaction sent! Waiting for block confirmation...<br><br><strong>Hash:</strong> <a href="https://lukso.network{txResponse.hash}" target="_blank" style="color: #fff;">${txResponse.hash}</a>`, "info");
+
+            // Wait for 1 confirmation block confirmation
+            const receipt = await txResponse.wait(1);
+            
+            showStatus(`<strong>Success!</strong> Transaction mined in block ${receipt.blockNumber}. Your consolidation request has been filed to the consensus layer queue. It may take roughly 27+ hours to complete processing.`, "success");
+        } catch (err) {
+            showStatus(`Transaction transaction dropped or rejected: ${err.message}`, "error");
+        }
+    });
+</script>
+
+</body>
+</html>
