@@ -4,14 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LUKSO 0x01 to 0x02 Credential Upgrader</title>
-    <!-- FIXED: Correctly loads Ethers.js v6 via unpkg CDN -->
-    <script src="https://unpkg.com"></script>
+    
+    <!-- HIGH PRIORITY LOAD: Ethers.js loaded first with a reliable fallback -->
+    <script src="https://cloudflare.com" integrity="sha512-SMR+n6Gsh8S9QunfBvHwHqMkh9L780mQas4+28YtEov9OskF03Ww+01/tD9uYfW8X2q4Hq6lH4mS/vUv/3N6A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script>
+        // Fallback to unpkg if Cloudflare fails to load for any reason
+        if (typeof ethers === 'undefined') {
+            document.write('<script src="https://unpkg.com"><\/script>');
+        }
+    </script>
+
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 2rem; max-width: 600px; margin: 0 auto; }
         .card { background: #1e293b; border-radius: 12px; padding: 2rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); border: 1px solid #334155; }
         h1 { font-size: 1.5rem; margin-top: 0; color: #f43f5e; }
         label { display: block; margin-top: 1rem; margin-bottom: 0.5rem; font-weight: 600; color: #94a3b8; }
-        /* FIXED: Removed the invalid wdouble-width style */
         input { width: 100%; padding: 0.75rem; background: #0f172a; border: 1px solid #475569; border-radius: 6px; color: #fff; font-family: monospace; font-size: 0.9rem; box-sizing: border-box; }
         button { background: #f43f5e; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 1.5rem; width: 100%; font-size: 1rem; }
         button:hover { background: #e11d48; }
@@ -22,6 +29,7 @@
         .error { background: #4c1d95; border-left: 4px solid #8b5cf6; color: #ddd6fe; }
     </style>
 </head>
+
 <body>
 
 <div class="card">
