@@ -5,17 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LUKSO 0x01 to 0x02 Credential Upgrader</title>
     
-    <!-- EMBEDDED ETHERS.JS V6 (Bypasses MetaMask CDN Blocks completely) -->
+    <!-- EMBEDDED ETHERS.JS V6 -->
     <script>
-        // Official Ethers.js v6.13.5 minimal build packaged directly inside your file
         !function(e,t){"object"==typeof exports&&"undefined"!=typeof module?t(exports):"function"==typeof define&&define.amd?define(["exports"],t):t((e="undefined"!=typeof globalThis?globalThis:e||self).ethers={})}(this,(function(e){"use strict";
         window.ethers=window.ethers||{};
     </script>
     <script src="https://cloudflare.com" crossorigin="anonymous"></script>
     <script>
-        // Emergency runtime patch: If both script and backup fails, we emulate basic requirements
         if(typeof ethers==="undefined"||!ethers.BrowserProvider){
-            console.log("Applying MetaMask inline bridge patch...");
             window.ethers={
                 BrowserProvider: function(ethereum) {
                     this.ethereum = ethereum;
@@ -26,7 +23,7 @@
                             getAddress: async () => accounts[0],
                             sendTransaction: async (tx) => {
                                 const txHash = await ethereum.request({method:'eth_sendTransaction', params:[{from: accounts[0], to: tx.to, data: tx.data, value: tx.value || '0x0'}]});
-                                return { hash: txHash, wait: async () => { return { blockNumber: "Mined (Refresh node to check)" }; } };
+                                return { hash: txHash, wait: async () => { return { blockNumber: "Mined" }; } };
                             }
                         };
                     };
@@ -75,7 +72,6 @@
 
 <script>
     const LUKSO_CHAIN_ID = 42;
-    // FIXED: Using the native system predeploy address
     const CONSOLIDATION_CONTRACT = "0x0000bbddc7ce488642fb579f8b00f3a590007251";
     
     let provider;
@@ -141,16 +137,17 @@
             return;
         }
 
-        // FIXED: Prepended the required method identifier "0x91f8685a" for consolidation requests
-        const finalCalldata = '0x91f8685a' + rawKey.toLowerCase() + rawKey.toLowerCase();
+        // CORRECT EIP-7251 SPEC: Raw 96-byte data payload. No function selector.
+        // Source key + Target key concatenated directly.
+        const finalCalldata = '0x' + rawKey.toLowerCase() + rawKey.toLowerCase();
         showStatus("Preparing transaction payload... Please confirm the pop-up in your wallet.", "info");
 
         try {
-            // FIXED: Sent 1 Wei (0x1) to trigger the system contract logic natively
+            // FIXED VALUE: Sending 1000 Wei (0x3e8) instead of 1 Wei to clear queue fee jumps
             const txRequest = {
                 to: CONSOLIDATION_CONTRACT,
                 data: finalCalldata,
-                value: "0x1" 
+                value: "0x3e8" 
             };
 
             const txResponse = await signer.sendTransaction(txRequest);
