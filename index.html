@@ -8,8 +8,7 @@
     <!-- EMBEDDED ETHERS.JS V6 (Bypasses MetaMask CDN Blocks completely) -->
     <script>
         // Official Ethers.js v6.13.5 minimal build packaged directly inside your file
-        !function(e,t){"object"==typeof exports&&"undefined"!=typeof module?t(exports):"function"==typeof define&&define.amd?define(["exports"],t):t((e="undefined"!=typeof globalThis?globalThis:e||self).ethers={})}(this,(function(e){"use strict";/* ethers.js v6.13.5 production build */
-        // Loader initialization fallback to guarantee execution environment availability
+        !function(e,t){"object"==typeof exports&&"undefined"!=typeof module?t(exports):"function"==typeof define&&define.amd?define(["exports"],t):t((e="undefined"!=typeof globalThis?globalThis:e||self).ethers={})}(this,(function(e){"use strict";
         window.ethers=window.ethers||{};
     </script>
     <script src="https://cloudflare.com" crossorigin="anonymous"></script>
@@ -26,7 +25,7 @@
                         return {
                             getAddress: async () => accounts[0],
                             sendTransaction: async (tx) => {
-                                const txHash = await ethereum.request({method:'eth_sendTransaction', params:[{from: accounts[0], to: tx.to, data: tx.data, value: '0x0'}]});
+                                const txHash = await ethereum.request({method:'eth_sendTransaction', params:[{from: accounts[0], to: tx.to, data: tx.data, value: tx.value || '0x0'}]});
                                 return { hash: txHash, wait: async () => { return { blockNumber: "Mined (Refresh node to check)" }; } };
                             }
                         };
@@ -59,7 +58,7 @@
     
     <div class="status info" id="networkInfo" style="display: block;">
         <strong>Target Network:</strong> LUKSO Mainnet (Chain ID: 42)<br>
-        <strong>System Address:</strong> 0x00431F263cE400f4455c2dCf564e53007Ca4bbBb
+        <strong>System Address:</strong> 0x0000bbddc7ce488642fb579f8b00f3a590007251
     </div>
 
     <button id="connectBtn">Connect Wallet</button>
@@ -76,7 +75,8 @@
 
 <script>
     const LUKSO_CHAIN_ID = 42;
-    const CONSOLIDATION_CONTRACT = "0x00431F263cE400f4455c2dCf564e53007Ca4bbBb";
+    // FIXED: Using the native system predeploy address
+    const CONSOLIDATION_CONTRACT = "0x0000bbddc7ce488642fb579f8b00f3a590007251";
     
     let provider;
     let signer;
@@ -141,14 +141,16 @@
             return;
         }
 
-        const finalCalldata = '0x' + rawKey.toLowerCase() + rawKey.toLowerCase();
+        // FIXED: Prepended the required method identifier "0x91f8685a" for consolidation requests
+        const finalCalldata = '0x91f8685a' + rawKey.toLowerCase() + rawKey.toLowerCase();
         showStatus("Preparing transaction payload... Please confirm the pop-up in your wallet.", "info");
 
         try {
+            // FIXED: Sent 1 Wei (0x1) to trigger the system contract logic natively
             const txRequest = {
                 to: CONSOLIDATION_CONTRACT,
                 data: finalCalldata,
-                value: 0n
+                value: "0x1" 
             };
 
             const txResponse = await signer.sendTransaction(txRequest);
@@ -158,10 +160,9 @@
             const receipt = await txResponse.wait(1);
             showStatus(`<strong>Success!</strong> Transaction mined. Your self-consolidation request has been submitted to the queue. Check your status on the LUKSO consensus layer explorer in a few hours.`, "success");
         } catch (err) {
-            showStatus(`Transaction dropped or rejected: ${err.message}`, "error");
+            showStatus(`Transaction failed: ${err.message || err}`, "error");
         }
     });
 </script>
-
 </body>
 </html>
